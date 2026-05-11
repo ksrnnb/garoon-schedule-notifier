@@ -76,5 +76,8 @@
   },
   "opt_test_sound_button": {
     "message": "Test play"
+  },
+  "minutes_before": {
+    "message": "minutes before"
   }
 }

@@ -76,5 +76,8 @@
   },
   "opt_test_sound_button": {
     "message": "テスト再生"
+  },
+  "minutes_before": {
+    "message": "分前"
   }
 }
