@@ -1,6 +1,6 @@
 {
   "name": "garoon-schedule-notifier",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Chrome extension that enhances Garoon's event notifications.",
   "author": "Kyota Okabe",
   "license": "MIT",
