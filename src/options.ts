@@ -18,19 +18,6 @@ function input(
   return elem;
 }
 
-function textarea(
-  name: string,
-  defaultValue?: string | undefined,
-): HTMLTextAreaElement {
-  const elem = document.querySelector(
-    `textarea[name=${name}]`,
-  ) as HTMLTextAreaElement;
-  if (typeof defaultValue === 'string') {
-    elem.value = defaultValue;
-  }
-  return elem;
-}
-
 function clamp01(n: number): number {
   if (Number.isNaN(n)) return defaultConfig.soundVolume!;
   return Math.max(0, Math.min(1, n));
@@ -43,11 +30,6 @@ async function init() {
 
   const baseURL = input('base-url', v.baseURL);
   baseURL.addEventListener('input', () => baseURL.setCustomValidity(''));
-  const notifiesEvents = input('notifies-events', v.notifiesEvents);
-  const ignoreEventKeywords = textarea(
-    'ignore-event-keywords',
-    v.ignoreEventKeywords || defaultConfig.ignoreEventKeywords,
-  );
   const notifyMinutesBefore = input(
     'notify-minutes-before',
     `${v.notifyMinutesBefore || defaultConfig.notifyMinutesBefore}`,
@@ -101,11 +83,9 @@ async function init() {
       baseURL.setCustomValidity('');
       await store.save({
         baseURL: baseURL.value,
-        notifiesEvents: notifiesEvents.checked,
         notifyMinutesBefore:
           parseInt(notifyMinutesBefore.value, 10) ||
           defaultConfig.notifyMinutesBefore,
-        ignoreEventKeywords: ignoreEventKeywords.value,
         playsSound: playsSound.checked,
         soundVolume: clamp01(parseInt(soundVolume.value, 10) / 100),
       });

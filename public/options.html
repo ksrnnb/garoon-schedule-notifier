@@ -37,22 +37,10 @@
           <div class="card-title">__MSG_opt_notification_title__</div>
         </div>
         <div class="card-body">
-          <div class="checkbox-container opt-item">
-            <label>
-              <input type="checkbox" name="notifies-events" class="checkbox">
-              __MSG_opt_notifies_events_label__
-            </label>
-            <div class="opt-subitem">
-              <div class="input-group notify-minutes-before">
-                <input class="input" type="number" name="notify-minutes-before" min="0" max="60">
-                <span class="input-group-text">__MSG_minutes_before__</span>
-              </div>
-            </div>
-            <div class="opt-subitem">
-              <label for="ignore-event-keywords">__MSG_ignore_event_name_keywords__</label>
-              <div class="input-group">
-                <textarea class="input" name="ignore-event-keywords"></textarea>
-              </div>
+          <div class="opt-item">
+            <div class="input-group notify-minutes-before">
+              <input class="input" type="number" name="notify-minutes-before" min="0" max="60">
+              <span class="input-group-text">__MSG_minutes_before__</span>
             </div>
           </div>
           <div class="checkbox-container opt-item">

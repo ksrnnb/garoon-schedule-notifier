@@ -23,12 +23,6 @@
   "opt_notification_title": {
     "message": "Notification preference"
   },
-  "opt_notifies_events_label": {
-    "message": "Notifies events"
-  },
-  "ignore_event_name_keywords": {
-    "message": "Ignore event name keywords (separate by line break)"
-  },
   "save_options": {
     "message": "Sace"
   },

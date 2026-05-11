@@ -23,12 +23,6 @@
   "opt_notification_title": {
     "message": "通知設定"
   },
-  "opt_notifies_events_label": {
-    "message": "予定を通知する"
-  },
-  "ignore_event_name_keywords": {
-    "message": "無視するイベント名のキーワード (改行区切り)"
-  },
   "save_options": {
     "message": "設定を保存する"
   },

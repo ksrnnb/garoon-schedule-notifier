@@ -20,15 +20,6 @@ export function filterUpcomingEvents(
   });
 }
 
-// Parse the ignore-keywords textarea (one keyword per line). Trims, lowercases,
-// and discards empty lines so callers can do a plain substring match.
-export function parseIgnoreKeywords(raw: string): string[] {
-  return raw
-    .split('\n')
-    .map(s => s.trim().toLowerCase())
-    .filter(Boolean);
-}
-
 // Pick events whose start time is exactly `notifyMinutesBefore` minutes from
 // `now`. Comparisons happen on minute granularity to mirror the 1-minute alarm
 // tick in background.ts.
@@ -36,13 +27,10 @@ export function pickEventsToNotify(
   events: ScheduleEvent[] | undefined,
   now: number,
   notifyMinutesBefore: number,
-  ignoreKeywords: string[],
 ): ScheduleEvent[] {
   if (!events) return [];
   const curMin = Math.round(now / 60_000);
   return events.filter(ev => {
-    const subject = ev.subject.toLowerCase();
-    if (ignoreKeywords.some(s => subject.includes(s))) return false;
     const startMin = Math.floor(new Date(ev.start.dateTime).getTime() / 60_000);
     return curMin + notifyMinutesBefore === startMin;
   });

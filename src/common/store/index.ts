@@ -10,9 +10,7 @@ export interface Store {
 
   events?: ScheduleEvent[];
 
-  notifiesEvents?: boolean;
   notifyMinutesBefore?: number;
-  ignoreEventKeywords: string;
 
   playsSound?: boolean;
   soundVolume?: number;
@@ -20,8 +18,6 @@ export interface Store {
 
 export const defaultConfig: Store = {
   refreshInMinutes: 1,
-  notifiesEvents: true,
-  ignoreEventKeywords: '',
   notifyMinutesBefore: 10,
   baseURL: '',
   playsSound: true,

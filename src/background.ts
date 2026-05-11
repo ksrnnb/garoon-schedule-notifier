@@ -7,7 +7,6 @@ import {
   filterUpcomingEvents,
   initNotificationEvent,
   notify,
-  parseIgnoreKeywords,
   pickEventsToNotify,
   playChime,
   requireAuth,
@@ -48,32 +47,18 @@ async function updateScheduleEvents(baseURL: string) {
 }
 
 async function notifyEvents() {
-  const {
-    events,
-    notifiesEvents,
-    notifyMinutesBefore,
-    ignoreEventKeywords,
-    playsSound,
-    soundVolume,
-    baseURL,
-  } = await store.load();
-  if (!notifiesEvents) {
-    return;
-  }
+  const { events, notifyMinutesBefore, playsSound, soundVolume, baseURL } =
+    await store.load();
 
   const duration = notifyMinutesBefore || 0;
-  const ignoreKeywords = parseIgnoreKeywords(ignoreEventKeywords);
 
-  pickEventsToNotify(events, Date.now(), duration, ignoreKeywords).forEach(
-    ev => {
-      notifyEvent(
-        ev,
-        baseURL &&
-          `${baseURL.replace(/\/+$/, '')}/schedule/view?event=${ev.id}`,
-        playsSound ? soundVolume : undefined,
-      );
-    },
-  );
+  pickEventsToNotify(events, Date.now(), duration).forEach(ev => {
+    notifyEvent(
+      ev,
+      baseURL && `${baseURL.replace(/\/+$/, '')}/schedule/view?event=${ev.id}`,
+      playsSound ? soundVolume : undefined,
+    );
+  });
 }
 
 async function notifyEvent(ev: ScheduleEvent, url?: string, volume?: number) {

@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  filterUpcomingEvents,
-  parseIgnoreKeywords,
-  pickEventsToNotify,
-} from '../eventFilter';
+import { filterUpcomingEvents, pickEventsToNotify } from '../eventFilter';
 import { buildEvent } from '../../../../test/fixtures/events';
 
 const DAY_MS = 86_400_000;
@@ -91,34 +87,9 @@ describe('filterUpcomingEvents', () => {
   });
 });
 
-describe('parseIgnoreKeywords', () => {
-  it('returns an empty array for an empty string', () => {
-    expect(parseIgnoreKeywords('')).toEqual([]);
-  });
-
-  it('lowercases and returns single-line input', () => {
-    expect(parseIgnoreKeywords('Foo')).toEqual(['foo']);
-  });
-
-  it('splits on newlines, trims each line, lowercases all', () => {
-    expect(parseIgnoreKeywords('  Stand-up\nLUNCH\n')).toEqual([
-      'stand-up',
-      'lunch',
-    ]);
-  });
-
-  it('discards blank and whitespace-only lines', () => {
-    expect(parseIgnoreKeywords('foo\n\n   \nbar')).toEqual(['foo', 'bar']);
-  });
-
-  it('keeps interior whitespace inside a keyword (only outer trim)', () => {
-    expect(parseIgnoreKeywords('  hello  world  ')).toEqual(['hello  world']);
-  });
-});
-
 describe('pickEventsToNotify', () => {
   it('returns [] when events is undefined', () => {
-    expect(pickEventsToNotify(undefined, NOW, 10, [])).toEqual([]);
+    expect(pickEventsToNotify(undefined, NOW, 10)).toEqual([]);
   });
 
   it('matches an event whose start is exactly notifyMinutesBefore from now', () => {
@@ -127,7 +98,7 @@ describe('pickEventsToNotify', () => {
       subject: 'meeting',
       start: new Date(NOW + 10 * 60_000),
     });
-    const result = pickEventsToNotify([tenMinFromNow], NOW, 10, []);
+    const result = pickEventsToNotify([tenMinFromNow], NOW, 10);
     expect(result.map(e => e.id)).toEqual(['t10']);
   });
 
@@ -137,7 +108,7 @@ describe('pickEventsToNotify', () => {
       subject: 'meeting',
       start: new Date(NOW + 9 * 60_000),
     });
-    expect(pickEventsToNotify([nineMin], NOW, 10, [])).toEqual([]);
+    expect(pickEventsToNotify([nineMin], NOW, 10)).toEqual([]);
   });
 
   it('rejects an event one minute too late', () => {
@@ -146,7 +117,7 @@ describe('pickEventsToNotify', () => {
       subject: 'meeting',
       start: new Date(NOW + 11 * 60_000),
     });
-    expect(pickEventsToNotify([elevenMin], NOW, 10, [])).toEqual([]);
+    expect(pickEventsToNotify([elevenMin], NOW, 10)).toEqual([]);
   });
 
   it('matches at duration=0 when start === current minute', () => {
@@ -155,27 +126,8 @@ describe('pickEventsToNotify', () => {
       subject: 'meeting',
       start: new Date(Math.floor(NOW / 60_000) * 60_000),
     });
-    const result = pickEventsToNotify([right_now_min], NOW, 0, []);
+    const result = pickEventsToNotify([right_now_min], NOW, 0);
     expect(result.map(e => e.id)).toEqual(['now']);
-  });
-
-  it('drops an event whose subject contains an ignore keyword (case-insensitive)', () => {
-    const lunch = buildEvent({
-      id: 'l',
-      subject: 'Team LUNCH',
-      start: new Date(NOW + 10 * 60_000),
-    });
-    expect(pickEventsToNotify([lunch], NOW, 10, ['lunch'])).toEqual([]);
-  });
-
-  it('keeps events whose subject does not match any ignore keyword', () => {
-    const standup = buildEvent({
-      id: 's',
-      subject: 'Daily Stand-up',
-      start: new Date(NOW + 10 * 60_000),
-    });
-    const result = pickEventsToNotify([standup], NOW, 10, ['lunch', 'review']);
-    expect(result.map(e => e.id)).toEqual(['s']);
   });
 
   it('returns multiple events when several match the same minute', () => {
@@ -189,7 +141,7 @@ describe('pickEventsToNotify', () => {
       subject: 'B',
       start: new Date(NOW + 10 * 60_000 + 30_000),
     });
-    const result = pickEventsToNotify([a, b], NOW, 10, []);
+    const result = pickEventsToNotify([a, b], NOW, 10);
     // b's startMin = floor((NOW + 10*60000 + 30000)/60000) = floor(NOW/60000) + 10
     // i.e. floor truncates the trailing 30s → still matches.
     expect(result.map(e => e.id).sort()).toEqual(['a', 'b']);
