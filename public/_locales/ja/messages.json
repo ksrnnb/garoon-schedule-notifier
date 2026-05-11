@@ -72,6 +72,6 @@
     "message": "テスト再生"
   },
   "minutes_before": {
-    "message": "分前"
+    "message": "分前に通知する"
   }
 }

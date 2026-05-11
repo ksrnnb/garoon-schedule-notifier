@@ -72,6 +72,6 @@
     "message": "Test play"
   },
   "minutes_before": {
-    "message": "minutes before"
+    "message": "minutes before each event"
   }
 }
