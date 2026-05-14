@@ -89,16 +89,24 @@ describe('filterUpcomingEvents', () => {
 
 describe('pickEventsToNotify', () => {
   it('returns [] when events is undefined', () => {
-    expect(pickEventsToNotify(undefined, NOW, 10)).toEqual([]);
+    expect(pickEventsToNotify(undefined, NOW, [10])).toEqual([]);
   });
 
-  it('matches an event whose start is exactly notifyMinutesBefore from now', () => {
+  it('returns [] when offset list is empty', () => {
+    const ev = buildEvent({
+      id: 'x',
+      start: new Date(NOW + 10 * 60_000),
+    });
+    expect(pickEventsToNotify([ev], NOW, [])).toEqual([]);
+  });
+
+  it('matches an event whose start is exactly one of the offsets from now', () => {
     const tenMinFromNow = buildEvent({
       id: 't10',
       subject: 'meeting',
       start: new Date(NOW + 10 * 60_000),
     });
-    const result = pickEventsToNotify([tenMinFromNow], NOW, 10);
+    const result = pickEventsToNotify([tenMinFromNow], NOW, [10]);
     expect(result.map(e => e.id)).toEqual(['t10']);
   });
 
@@ -108,7 +116,7 @@ describe('pickEventsToNotify', () => {
       subject: 'meeting',
       start: new Date(NOW + 9 * 60_000),
     });
-    expect(pickEventsToNotify([nineMin], NOW, 10)).toEqual([]);
+    expect(pickEventsToNotify([nineMin], NOW, [10])).toEqual([]);
   });
 
   it('rejects an event one minute too late', () => {
@@ -117,16 +125,16 @@ describe('pickEventsToNotify', () => {
       subject: 'meeting',
       start: new Date(NOW + 11 * 60_000),
     });
-    expect(pickEventsToNotify([elevenMin], NOW, 10)).toEqual([]);
+    expect(pickEventsToNotify([elevenMin], NOW, [10])).toEqual([]);
   });
 
-  it('matches at duration=0 when start === current minute', () => {
+  it('matches at offset=0 when start === current minute', () => {
     const right_now_min = buildEvent({
       id: 'now',
       subject: 'meeting',
       start: new Date(Math.floor(NOW / 60_000) * 60_000),
     });
-    const result = pickEventsToNotify([right_now_min], NOW, 0);
+    const result = pickEventsToNotify([right_now_min], NOW, [0]);
     expect(result.map(e => e.id)).toEqual(['now']);
   });
 
@@ -141,9 +149,22 @@ describe('pickEventsToNotify', () => {
       subject: 'B',
       start: new Date(NOW + 10 * 60_000 + 30_000),
     });
-    const result = pickEventsToNotify([a, b], NOW, 10);
-    // b's startMin = floor((NOW + 10*60000 + 30000)/60000) = floor(NOW/60000) + 10
-    // i.e. floor truncates the trailing 30s → still matches.
+    const result = pickEventsToNotify([a, b], NOW, [10]);
     expect(result.map(e => e.id).sort()).toEqual(['a', 'b']);
+  });
+
+  it('matches events at any offset in the list', () => {
+    const at15 = buildEvent({ id: 'at15', start: new Date(NOW + 15 * 60_000) });
+    const at3 = buildEvent({ id: 'at3', start: new Date(NOW + 3 * 60_000) });
+    const at1 = buildEvent({ id: 'at1', start: new Date(NOW + 1 * 60_000) });
+    const at7 = buildEvent({ id: 'at7', start: new Date(NOW + 7 * 60_000) });
+    const result = pickEventsToNotify([at15, at3, at1, at7], NOW, [15, 3, 1]);
+    expect(result.map(e => e.id).sort()).toEqual(['at1', 'at15', 'at3']);
+  });
+
+  it('does not return the same event twice when offsets contain duplicates', () => {
+    const at10 = buildEvent({ id: 'at10', start: new Date(NOW + 10 * 60_000) });
+    const result = pickEventsToNotify([at10], NOW, [10, 10]);
+    expect(result.map(e => e.id)).toEqual(['at10']);
   });
 });

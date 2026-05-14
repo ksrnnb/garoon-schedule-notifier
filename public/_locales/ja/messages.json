@@ -26,6 +26,9 @@
   "save_options": {
     "message": "設定を保存する"
   },
+  "cancel": {
+    "message": "キャンセル"
+  },
   "err_unauthenticated": {
     "message": "認証されていません"
   },
@@ -73,5 +76,20 @@
   },
   "minutes_before": {
     "message": "分前に通知する"
+  },
+  "minutes_before_short": {
+    "message": "分前"
+  },
+  "opt_notification_timings_label": {
+    "message": "通知タイミング"
+  },
+  "opt_add_notification": {
+    "message": "通知を追加"
+  },
+  "opt_remove_notification": {
+    "message": "この通知を削除"
+  },
+  "err_duplicate_notify_minutes": {
+    "message": "同じタイミングは登録できません"
   }
 }

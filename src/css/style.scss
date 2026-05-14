@@ -14,15 +14,15 @@ $border-radius-sm: 0.25rem;
 
 $border-color: #ccc;
 
-$white:           #fcfdff !default;
-$off-white:       #f5f5f7 !default;
+$white: #fcfdff !default;
+$off-white: #f5f5f7 !default;
 $high-light-gray: #d6d8dd !default;
-$light-gray:      #b7b9c0 !default;
-$gray:            #93959c !default;
-$dark-gray:       #4b4c52 !default;
-$deep-dark-gray:  #26282e !default;
-$off-black:       #1c1d22 !default;
-$black:           #0f0f11 !default;
+$light-gray: #b7b9c0 !default;
+$gray: #93959c !default;
+$dark-gray: #4b4c52 !default;
+$deep-dark-gray: #26282e !default;
+$off-black: #1c1d22 !default;
+$black: #0f0f11 !default;
 
 $primary-color: #0059ff;
 $secondary-color: $gray;
@@ -71,6 +71,10 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: default;
+}
+
 label {
   font-weight: bold;
 }
@@ -81,6 +85,7 @@ p {
   &:first-child {
     margin-top: 0;
   }
+
   &:last-child {
     margin-bottom: 0;
   }
@@ -107,6 +112,7 @@ p {
       margin-bottom: 0;
     }
   }
+
   &-body {
     background: $card-body-bg;
     padding: $card-padding;
@@ -151,7 +157,7 @@ p {
     }
   }
 
-  &-group > & {
+  &-group>& {
     flex: 1 1 auto;
   }
 }
@@ -180,6 +186,7 @@ p {
   &-container {
     padding: 0 0 0 1.25rem;
   }
+
   &-container & {
     margin: 0 0.25rem 0 -1.25rem;
   }
@@ -203,13 +210,18 @@ p {
   &:first-child {
     margin-top: 0;
   }
+
   &:last-child {
     margin-bottom: 0;
   }
 
-  & + & {
+  &+& {
     margin-top: $space-xl;
   }
+}
+
+.opt-item-label {
+  font-weight: bold;
 }
 
 .opt-subitem {
@@ -218,6 +230,7 @@ p {
   &:first-child {
     margin-top: 0;
   }
+
   &:last-child {
     margin-bottom: 0;
   }
@@ -246,6 +259,54 @@ p {
 
   .notify-minutes-before {
     width: 10em;
+  }
+
+  .notify-minutes-list {
+    list-style: none;
+    margin: $space-md 0 $space-md;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: $space-sm;
+  }
+
+  .notify-minutes-row {
+    display: flex;
+    align-items: center;
+    gap: $space-sm;
+  }
+
+  .button-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: none;
+    border-radius: $border-radius-sm;
+    background: transparent;
+    color: $base-color;
+    line-height: 1;
+
+    .icon {
+      width: 1rem;
+      height: 1rem;
+    }
+
+    &:disabled {
+      color: $light-gray;
+      cursor: default;
+    }
+  }
+
+  .remove-notify-minutes {
+    transition: color 0.1s, background-color 0.1s;
+
+    &:hover:not(:disabled) {
+      color: $dangerous-color;
+      background: $tint-dangerous-color;
+    }
   }
 
   .sound-volume-row {
@@ -277,11 +338,16 @@ p {
     text-align: center;
   }
 
+  .cancel-button {
+    margin-right: $space-lg;
+  }
+
   .save-button {
 
     &-container {
       position: relative;
-      > .saved {
+
+      >.saved {
         color: $safe-color;
         // display: inline-block;
         position: absolute;
@@ -294,10 +360,12 @@ p {
         &.fade-out {
           animation: fade-out-frames 1s linear 0.5s forwards;
         }
+
         @keyframes fade-out-frames {
           0% {
             opacity: 1;
           }
+
           100% {
             opacity: 0;
           }
@@ -346,6 +414,7 @@ p {
       align-items: center;
       gap: 0.25rem;
     }
+
     &-container[data-is-loading="true"] .refresh-button .icon {
       animation: refresh-spin 1s linear infinite;
     }
@@ -416,6 +485,7 @@ p {
     }
 
     &--past {
+
       .event-link,
       .event-time,
       .event-subject {
