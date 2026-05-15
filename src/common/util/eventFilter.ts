@@ -20,18 +20,20 @@ export function filterUpcomingEvents(
   });
 }
 
-// Pick events whose start time is exactly `notifyMinutesBefore` minutes from
-// `now`. Comparisons happen on minute granularity to mirror the 1-minute alarm
-// tick in background.ts.
+// Pick events whose start time is exactly one of `notifyMinutesBeforeList`
+// minutes from `now`. Comparisons happen on minute granularity to mirror the
+// 1-minute alarm tick in background.ts. Duplicate offsets are coalesced so an
+// event won't be returned twice per tick.
 export function pickEventsToNotify(
   events: ScheduleEvent[] | undefined,
   now: number,
-  notifyMinutesBefore: number,
+  notifyMinutesBeforeList: number[],
 ): ScheduleEvent[] {
-  if (!events) return [];
+  if (!events || notifyMinutesBeforeList.length === 0) return [];
   const curMin = Math.round(now / 60_000);
+  const offsets = new Set(notifyMinutesBeforeList);
   return events.filter(ev => {
     const startMin = Math.floor(new Date(ev.start.dateTime).getTime() / 60_000);
-    return curMin + notifyMinutesBefore === startMin;
+    return offsets.has(startMin - curMin);
   });
 }

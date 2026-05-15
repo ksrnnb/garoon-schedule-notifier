@@ -47,18 +47,19 @@ async function updateScheduleEvents(baseURL: string) {
 }
 
 async function notifyEvents() {
-  const { events, notifyMinutesBefore, playsSound, soundVolume, baseURL } =
+  const { events, notifyMinutesBeforeList, playsSound, soundVolume, baseURL } =
     await store.load();
 
-  const duration = notifyMinutesBefore || 0;
-
-  pickEventsToNotify(events, Date.now(), duration).forEach(ev => {
-    notifyEvent(
-      ev,
-      baseURL && `${baseURL.replace(/\/+$/, '')}/schedule/view?event=${ev.id}`,
-      playsSound ? soundVolume : undefined,
-    );
-  });
+  pickEventsToNotify(events, Date.now(), notifyMinutesBeforeList ?? []).forEach(
+    ev => {
+      notifyEvent(
+        ev,
+        baseURL &&
+          `${baseURL.replace(/\/+$/, '')}/schedule/view?event=${ev.id}`,
+        playsSound ? soundVolume : undefined,
+      );
+    },
+  );
 }
 
 async function notifyEvent(ev: ScheduleEvent, url?: string, volume?: number) {

@@ -38,10 +38,11 @@
         </div>
         <div class="card-body">
           <div class="opt-item">
-            <div class="input-group notify-minutes-before">
-              <input class="input" type="number" name="notify-minutes-before" min="1" max="60">
-              <span class="input-group-text">__MSG_minutes_before__</span>
-            </div>
+            <div class="opt-item-label">__MSG_opt_notification_timings_label__</div>
+            <ul class="notify-minutes-list" id="notify-minutes-list"></ul>
+            <button type="button" class="button" name="add-notify-minutes">
+              + __MSG_opt_add_notification__
+            </button>
           </div>
           <div class="checkbox-container opt-item">
             <label>
@@ -62,6 +63,7 @@
         </div>
       </div>
       <footer class="footer block">
+        <button class="button cancel-button" type="button" name="cancel" disabled>__MSG_cancel__</button>
         <span class="save-button-container">
           <button class="primary-button save-button" type="submit">__MSG_save_options__</button>
           <span class="saved" hidden>__MSG_saved__</span>

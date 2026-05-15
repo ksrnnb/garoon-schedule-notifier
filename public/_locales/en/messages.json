@@ -26,6 +26,9 @@
   "save_options": {
     "message": "Sace"
   },
+  "cancel": {
+    "message": "Cancel"
+  },
   "err_unauthenticated": {
     "message": "Unauthorized"
   },
@@ -73,5 +76,20 @@
   },
   "minutes_before": {
     "message": "minutes before each event"
+  },
+  "minutes_before_short": {
+    "message": "minutes before"
+  },
+  "opt_notification_timings_label": {
+    "message": "Notification timings"
+  },
+  "opt_add_notification": {
+    "message": "Add notification"
+  },
+  "opt_remove_notification": {
+    "message": "Remove this notification"
+  },
+  "err_duplicate_notify_minutes": {
+    "message": "Duplicate timing is not allowed"
   }
 }
