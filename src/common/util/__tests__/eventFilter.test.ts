@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   GRACE_MS,
+  PRECISE_LOOKAHEAD_MS,
   filterUpcomingEvents,
+  findNextPreciseDeadline,
   mergeAndPruneNotifiedKeys,
   pickEventsToNotify,
 } from '../eventFilter';
@@ -190,6 +192,109 @@ describe('pickEventsToNotify', () => {
     const notified = [keyOf('rec', start1, 10)];
     const result = pickEventsToNotify([occ1, occ2], NOW, [10], notified);
     expect(result.map(p => p.key)).toEqual([keyOf('rec', start2, 10)]);
+  });
+});
+
+describe('findNextPreciseDeadline', () => {
+  it('returns undefined when events is undefined', () => {
+    expect(findNextPreciseDeadline(undefined, NOW, [1], [])).toBeUndefined();
+  });
+
+  it('returns undefined when notifyMinutesBeforeList is empty', () => {
+    const ev = buildEvent({ id: 'x', start: new Date(NOW + 60_000) });
+    expect(findNextPreciseDeadline([ev], NOW, [], [])).toBeUndefined();
+  });
+
+  it('returns undefined when no deadline falls within the lookahead', () => {
+    // event start 30min away, offset 1min → deadline 29min ahead → outside 5min
+    const ev = buildEvent({ id: 'far', start: new Date(NOW + 30 * 60_000) });
+    expect(findNextPreciseDeadline([ev], NOW, [1], [])).toBeUndefined();
+  });
+
+  it('returns the deadline for a short-offset reminder firing soon (offset=1, start in 4min)', () => {
+    const start = new Date(NOW + 4 * 60_000);
+    const ev = buildEvent({ id: 's', start });
+    const result = findNextPreciseDeadline([ev], NOW, [1], []);
+    expect(result).toBe(start.getTime() - 1 * 60_000);
+  });
+
+  it('returns the deadline for a long-offset reminder (offset=60) when event is 64min away', () => {
+    // event start in 64min, offset 60min → deadline in 4min → within lookahead
+    // 「event.start 基準」ではなく「deadline 基準」であることの確認
+    const start = new Date(NOW + 64 * 60_000);
+    const ev = buildEvent({ id: 'long', start });
+    const result = findNextPreciseDeadline([ev], NOW, [60], []);
+    expect(result).toBe(start.getTime() - 60 * 60_000);
+  });
+
+  it('skips deadlines that have already passed', () => {
+    // event start in 30s, offset 1min → deadline 30s ago (past)
+    const ev = buildEvent({ id: 'past', start: new Date(NOW + 30_000) });
+    expect(findNextPreciseDeadline([ev], NOW, [1], [])).toBeUndefined();
+  });
+
+  it('skips events that have already started', () => {
+    const ev = buildEvent({ id: 'started', start: new Date(NOW - 1_000) });
+    expect(findNextPreciseDeadline([ev], NOW, [1], [])).toBeUndefined();
+  });
+
+  it('includes a deadline exactly at the lookahead boundary (deadline - now == lookaheadMs)', () => {
+    // event start = lookahead + offset, deadline - now == lookaheadMs
+    const start = new Date(NOW + PRECISE_LOOKAHEAD_MS + 1 * 60_000);
+    const ev = buildEvent({ id: 'edge', start });
+    const result = findNextPreciseDeadline([ev], NOW, [1], []);
+    expect(result).toBe(NOW + PRECISE_LOOKAHEAD_MS);
+  });
+
+  it('excludes a deadline 1ms past the lookahead boundary', () => {
+    const start = new Date(NOW + PRECISE_LOOKAHEAD_MS + 1 * 60_000 + 1);
+    const ev = buildEvent({ id: 'past-edge', start });
+    expect(findNextPreciseDeadline([ev], NOW, [1], [])).toBeUndefined();
+  });
+
+  it('skips when the (event, offset) key is already in notifiedKeys', () => {
+    const start = new Date(NOW + 2 * 60_000);
+    const ev = buildEvent({ id: 'done', start });
+    const notified = [`done:${start.getTime()}:1`];
+    expect(findNextPreciseDeadline([ev], NOW, [1], notified)).toBeUndefined();
+  });
+
+  it('accepts notifiedKeys as a Set', () => {
+    const start = new Date(NOW + 2 * 60_000);
+    const ev = buildEvent({ id: 'done', start });
+    const notified = new Set([`done:${start.getTime()}:1`]);
+    expect(findNextPreciseDeadline([ev], NOW, [1], notified)).toBeUndefined();
+  });
+
+  it('returns the earliest deadline across multiple candidates', () => {
+    // a: offset=1, start in 4min → deadline +3min
+    // b: offset=1, start in 2min → deadline +1min  ← earliest
+    // c: offset=60, start in 63min → deadline +3min
+    const a = buildEvent({ id: 'a', start: new Date(NOW + 4 * 60_000) });
+    const b = buildEvent({ id: 'b', start: new Date(NOW + 2 * 60_000) });
+    const c = buildEvent({ id: 'c', start: new Date(NOW + 63 * 60_000) });
+    const result = findNextPreciseDeadline([a, b, c], NOW, [1, 60], []);
+    expect(result).toBe(NOW + 1 * 60_000);
+  });
+
+  it('considers all offsets for the same event and picks the earliest deadline', () => {
+    // event start in 6min. offsets [1, 5]:
+    //   offset=1 → deadline +5min (lookahead boundary, included)
+    //   offset=5 → deadline +1min  ← earliest
+    const start = new Date(NOW + 6 * 60_000);
+    const ev = buildEvent({ id: 'multi', start });
+    const result = findNextPreciseDeadline([ev], NOW, [1, 5], []);
+    expect(result).toBe(start.getTime() - 5 * 60_000);
+  });
+
+  it('honors a custom lookaheadMs parameter', () => {
+    // deadline 8min ahead. default lookahead (5min) excludes; lookahead=10min includes.
+    const start = new Date(NOW + 9 * 60_000);
+    const ev = buildEvent({ id: 'cust', start });
+    expect(findNextPreciseDeadline([ev], NOW, [1], [])).toBeUndefined();
+    expect(findNextPreciseDeadline([ev], NOW, [1], [], 10 * 60_000)).toBe(
+      start.getTime() - 1 * 60_000,
+    );
   });
 });
 

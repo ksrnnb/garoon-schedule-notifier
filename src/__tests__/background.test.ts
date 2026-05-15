@@ -102,6 +102,7 @@ function installChrome(initial: Record<string, unknown> = {}) {
       // 既存 alarm 無し相当の undefined を返す。
       get: vi.fn().mockResolvedValue(undefined),
       create: vi.fn(),
+      clear: vi.fn().mockResolvedValue(true),
     },
     runtime: {
       onInstalled: {
@@ -367,5 +368,129 @@ describe('tick()', () => {
     expect(startupSlot.fn).toBeTypeOf('function');
     await startupSlot.fn!();
     expect(updateBadgeMock).toHaveBeenCalled();
+  });
+
+  it('passes a deterministic notification id (grn:event:<key>) to notify()', async () => {
+    const ctx = installChrome();
+    const now = Date.now();
+    const start = new Date(now + 10 * 60_000);
+    const ev = buildEvent({ id: 'detid', start });
+    seedStore(ctx.state, {
+      events: [ev],
+      notifyMinutesBeforeList: [10],
+      notifiedKeys: [],
+      refreshInMinutes: 1000,
+      lastUpdate: now,
+      lastAlarmPingedAt: now - 30_000,
+    });
+    const bg = await loadBackground();
+    await bg.tick();
+    // notify(options, url, notificationId) の第 3 引数を検証
+    expect(notifyMock).toHaveBeenCalledTimes(1);
+    const args = notifyMock.mock.calls[0];
+    expect(args[2]).toBe(`grn:event:detid:${start.getTime()}:10`);
+  });
+});
+
+describe('schedulePreciseAlarm', () => {
+  it('creates a precise alarm at the next deadline within lookahead', async () => {
+    const ctx = installChrome();
+    const now = Date.now();
+    // event start in 4min, offset=1 → deadline +3min (within 5min lookahead)
+    const start = new Date(now + 4 * 60_000);
+    const ev = buildEvent({ id: 'precise-target', start });
+    seedStore(ctx.state, {
+      events: [ev],
+      notifyMinutesBeforeList: [1],
+      notifiedKeys: [],
+      refreshInMinutes: 1000,
+      lastUpdate: now,
+      lastAlarmPingedAt: now - 30_000,
+    });
+    const bg = await loadBackground();
+    await bg.tick();
+    const createMock = chrome.alarms.create as ReturnType<typeof vi.fn>;
+    // ensureWatchAlarm + schedulePreciseAlarm の 2 回呼ばれる
+    const preciseCall = createMock.mock.calls.find(
+      c => c[0] === 'preciseNotify',
+    );
+    expect(preciseCall).toBeDefined();
+    expect(preciseCall![1]).toEqual({ when: start.getTime() - 1 * 60_000 });
+  });
+
+  it('clears the precise alarm when no upcoming deadline is in lookahead', async () => {
+    const ctx = installChrome();
+    const now = Date.now();
+    // event 30min ahead with offset=1 → deadline 29min away → outside lookahead
+    const ev = buildEvent({
+      id: 'too-far',
+      start: new Date(now + 30 * 60_000),
+    });
+    seedStore(ctx.state, {
+      events: [ev],
+      notifyMinutesBeforeList: [1],
+      notifiedKeys: [],
+      refreshInMinutes: 1000,
+      lastUpdate: now,
+      lastAlarmPingedAt: now - 30_000,
+    });
+    const bg = await loadBackground();
+    await bg.tick();
+    expect(chrome.alarms.clear).toHaveBeenCalledWith('preciseNotify');
+  });
+
+  it('routes precise alarm fire to tick({ forceUpdate: true }) (= API refresh even when not stale)', async () => {
+    const ctx = installChrome();
+    const now = Date.now();
+    seedStore(ctx.state, {
+      refreshInMinutes: 1000,
+      lastUpdate: now, // freshly updated → 通常 tick なら update() を skip
+      lastAlarmPingedAt: now - 30_000,
+    });
+    const { alarmSlot } = ctx;
+    await loadBackground();
+    // precise alarm 発火相当
+    await alarmSlot.fn!({ name: 'preciseNotify' });
+    expect(getScheduleEventsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not force update when periodic alarm fires (= respects refreshInMinutes gate)', async () => {
+    const ctx = installChrome();
+    const now = Date.now();
+    seedStore(ctx.state, {
+      refreshInMinutes: 1000,
+      lastUpdate: now,
+      lastAlarmPingedAt: now - 30_000,
+    });
+    const { alarmSlot } = ctx;
+    await loadBackground();
+    // periodic alarm 発火 (= forceUpdate なし)
+    await alarmSlot.fn!({ name: 'watchNotification' });
+    expect(getScheduleEventsMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('tick() concurrency', () => {
+  it('coalesces overlapping calls into a single in-flight Promise (notifyEvents runs once)', async () => {
+    const ctx = installChrome();
+    const now = Date.now();
+    const start = new Date(now + 10 * 60_000);
+    const ev = buildEvent({ id: 'lock', start });
+    seedStore(ctx.state, {
+      events: [ev],
+      notifyMinutesBeforeList: [10],
+      notifiedKeys: [],
+      refreshInMinutes: 1000,
+      lastUpdate: now,
+      lastAlarmPingedAt: now - 30_000,
+    });
+    const bg = await loadBackground();
+    // 2 つの tick を await せず同時に呼ぶ → 後発は in-flight Promise を返すだけ
+    const p1 = bg.tick();
+    const p2 = bg.tick({ forceUpdate: true });
+    expect(p1).toBe(p2);
+    await Promise.all([p1, p2]);
+    // notify は 1 回しか呼ばれない (同じ pick が二重発火しない)
+    expect(notifyMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -89,6 +89,50 @@ export function pickEventsToNotify(
   return out;
 }
 
+// 1 分周期の periodic tick だけだと通知遅延が最悪 ~59s 出る。MV3 alarm は
+// periodInMinutes の下限が運用上 1 分のため、これより短い周期は使えない。
+// 代わりに「通知 deadline までの距離」が短いときに one-shot 精密 alarm を
+// 上乗せして補う。基準は event.start ではなく deadline からの距離: 設定した
+// offset が 10min なら deadline は event.start - 10min、その「5min 前」(=
+// event.start - 15min) になった瞬間から精密スケジュール対象に入る。これにより
+// offset の長短 (例: 1min / 60min) に関わらず「あと 5 分で鳴る通知」だけが
+// 精度向上の恩恵を受ける。
+export const PRECISE_LOOKAHEAD_MS = 5 * 60_000;
+
+// 精密通知の対象となる「次の一発」の deadline (epoch ms) を返す。該当なしなら
+// undefined。発火タイミングそのものは呼び出し側 (chrome.alarms.create) に任せる。
+//
+// 条件:
+//   - event.start が now より未来 (= 既に始まった予定は対象外)
+//   - deadline = event.start - offset*60_000 が (now, now + lookaheadMs] にある
+//   - (event.id, event.start, offset) キーが notifiedKeys に未登録
+export function findNextPreciseDeadline(
+  events: ScheduleEvent[] | undefined,
+  now: number,
+  notifyMinutesBeforeList: number[],
+  notifiedKeys: ReadonlySet<string> | readonly string[],
+  lookaheadMs: number = PRECISE_LOOKAHEAD_MS,
+): number | undefined {
+  if (!events || notifyMinutesBeforeList.length === 0) return undefined;
+  const notified =
+    notifiedKeys instanceof Set ? notifiedKeys : new Set(notifiedKeys);
+  const offsets = Array.from(new Set(notifyMinutesBeforeList));
+  let earliest: number | undefined;
+  for (const ev of events) {
+    const startMs = new Date(ev.start.dateTime).getTime();
+    if (startMs <= now) continue;
+    for (const offset of offsets) {
+      const deadline = startMs - offset * 60_000;
+      if (deadline <= now || deadline - now > lookaheadMs) continue;
+      if (notified.has(notifyKey(ev, offset))) continue;
+      if (earliest === undefined || deadline < earliest) {
+        earliest = deadline;
+      }
+    }
+  }
+  return earliest;
+}
+
 // 既存キーと今回 picks をマージし、現行 events に存在しない occurrence のキーを
 // 剪定する。events 側は filterUpcomingEvents で「今日 00:00 〜 1 日先」に
 // 絞られているため、昨日以前や 1 日より先のキーは自然に落ちる。
