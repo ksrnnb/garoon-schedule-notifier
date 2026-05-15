@@ -6,5 +6,6 @@ export * from './eventFilter';
 export * from './message';
 export * from './notification';
 export * from './sound';
+export * from './sleep';
 export * from './format';
 export * from './url';

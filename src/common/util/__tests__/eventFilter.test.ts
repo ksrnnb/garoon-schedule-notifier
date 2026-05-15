@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { filterUpcomingEvents, pickEventsToNotify } from '../eventFilter';
+import {
+  GRACE_MS,
+  filterUpcomingEvents,
+  mergeAndPruneNotifiedKeys,
+  pickEventsToNotify,
+} from '../eventFilter';
 import { buildEvent } from '../../../../test/fixtures/events';
 
 const DAY_MS = 86_400_000;
@@ -38,27 +43,27 @@ describe('filterUpcomingEvents', () => {
     expect(result.map(e => e.id)).toEqual(['past-today']);
   });
 
-  it('keeps an event ~30 days from now minus 1ms (strict less-than horizon)', () => {
+  it('keeps an event ~1 day from now minus 1ms (strict less-than horizon)', () => {
     const justInside = buildEvent({
       id: 'inside',
-      start: new Date(NOW + 30 * DAY_MS - 1),
+      start: new Date(NOW + DAY_MS - 1),
     });
     const result = filterUpcomingEvents([justInside], NOW);
     expect(result.map(e => e.id)).toEqual(['inside']);
   });
 
-  it('drops an event exactly 30 days from now (strict horizon)', () => {
+  it('drops an event exactly 1 day from now (strict horizon)', () => {
     const onHorizon = buildEvent({
       id: 'edge',
-      start: new Date(NOW + 30 * DAY_MS),
+      start: new Date(NOW + DAY_MS),
     });
     expect(filterUpcomingEvents([onHorizon], NOW)).toEqual([]);
   });
 
-  it('drops an event 35 days from now', () => {
+  it('drops an event 5 days from now', () => {
     const farFuture = buildEvent({
       id: 'far',
-      start: new Date(NOW + 35 * DAY_MS),
+      start: new Date(NOW + 5 * DAY_MS),
     });
     expect(filterUpcomingEvents([farFuture], NOW)).toEqual([]);
   });
@@ -87,84 +92,159 @@ describe('filterUpcomingEvents', () => {
   });
 });
 
+// notifiedKeys 形式: `${id}:${startMs}:${offset}`
+const keyOf = (id: string, start: Date, offset: number): string =>
+  `${id}:${start.getTime()}:${offset}`;
+
 describe('pickEventsToNotify', () => {
   it('returns [] when events is undefined', () => {
-    expect(pickEventsToNotify(undefined, NOW, [10])).toEqual([]);
+    expect(pickEventsToNotify(undefined, NOW, [10], [])).toEqual([]);
   });
 
   it('returns [] when offset list is empty', () => {
+    const ev = buildEvent({ id: 'x', start: new Date(NOW + 10 * 60_000) });
+    expect(pickEventsToNotify([ev], NOW, [], [])).toEqual([]);
+  });
+
+  it('matches an event whose start is exactly one offset away (delta == offset*60_000)', () => {
+    const start = new Date(NOW + 10 * 60_000);
+    const ev = buildEvent({ id: 't10', start });
+    const result = pickEventsToNotify([ev], NOW, [10], []);
+    expect(result).toEqual([
+      { event: ev, offset: 10, key: keyOf('t10', start, 10) },
+    ]);
+  });
+
+  it('skips when start is 1ms past the offset (delta == offset*60_000 + 1ms)', () => {
     const ev = buildEvent({
-      id: 'x',
-      start: new Date(NOW + 10 * 60_000),
+      id: 't10b',
+      start: new Date(NOW + 10 * 60_000 + 1),
     });
-    expect(pickEventsToNotify([ev], NOW, [])).toEqual([]);
+    expect(pickEventsToNotify([ev], NOW, [10], [])).toEqual([]);
   });
 
-  it('matches an event whose start is exactly one of the offsets from now', () => {
-    const tenMinFromNow = buildEvent({
-      id: 't10',
-      subject: 'meeting',
-      start: new Date(NOW + 10 * 60_000),
-    });
-    const result = pickEventsToNotify([tenMinFromNow], NOW, [10]);
-    expect(result.map(e => e.id)).toEqual(['t10']);
+  it('rescues an event when delta is 30s past the notify deadline (alarm lag)', () => {
+    // start = now + 1min30s, offset=2min → delta(1.5min) <= 2min, key not in notifiedKeys
+    const start = new Date(NOW + 90_000);
+    const ev = buildEvent({ id: 'lag', start });
+    const result = pickEventsToNotify([ev], NOW, [2], []);
+    expect(result.map(p => p.event.id)).toEqual(['lag']);
   });
 
-  it('rejects an event one minute too early', () => {
-    const nineMin = buildEvent({
-      id: 't9',
-      subject: 'meeting',
-      start: new Date(NOW + 9 * 60_000),
-    });
-    expect(pickEventsToNotify([nineMin], NOW, [10])).toEqual([]);
+  it('fires for a past event still within GRACE_MS (e.g. just started)', () => {
+    const start = new Date(NOW - 30_000);
+    const ev = buildEvent({ id: 'just-started', start });
+    const result = pickEventsToNotify([ev], NOW, [2], []);
+    expect(result.map(p => p.event.id)).toEqual(['just-started']);
   });
 
-  it('rejects an event one minute too late', () => {
-    const elevenMin = buildEvent({
-      id: 't11',
-      subject: 'meeting',
-      start: new Date(NOW + 11 * 60_000),
-    });
-    expect(pickEventsToNotify([elevenMin], NOW, [10])).toEqual([]);
+  it('fires at exactly -GRACE_MS boundary', () => {
+    const start = new Date(NOW - GRACE_MS);
+    const ev = buildEvent({ id: 'edge', start });
+    const result = pickEventsToNotify([ev], NOW, [2], []);
+    expect(result.map(p => p.event.id)).toEqual(['edge']);
   });
 
-  it('matches at offset=0 when start === current minute', () => {
-    const right_now_min = buildEvent({
-      id: 'now',
-      subject: 'meeting',
-      start: new Date(Math.floor(NOW / 60_000) * 60_000),
-    });
-    const result = pickEventsToNotify([right_now_min], NOW, [0]);
-    expect(result.map(e => e.id)).toEqual(['now']);
+  it('skips an event past -GRACE_MS - 1ms', () => {
+    const start = new Date(NOW - GRACE_MS - 1);
+    const ev = buildEvent({ id: 'too-old', start });
+    expect(pickEventsToNotify([ev], NOW, [2], [])).toEqual([]);
   });
 
-  it('returns multiple events when several match the same minute', () => {
-    const a = buildEvent({
-      id: 'a',
-      subject: 'A',
-      start: new Date(NOW + 10 * 60_000),
-    });
-    const b = buildEvent({
-      id: 'b',
-      subject: 'B',
-      start: new Date(NOW + 10 * 60_000 + 30_000),
-    });
-    const result = pickEventsToNotify([a, b], NOW, [10]);
-    expect(result.map(e => e.id).sort()).toEqual(['a', 'b']);
+  it('skips when the notify key is already in notifiedKeys (dedup)', () => {
+    const start = new Date(NOW + 10 * 60_000);
+    const ev = buildEvent({ id: 't10', start });
+    const notified = [keyOf('t10', start, 10)];
+    expect(pickEventsToNotify([ev], NOW, [10], notified)).toEqual([]);
   });
 
-  it('matches events at any offset in the list', () => {
-    const at15 = buildEvent({ id: 'at15', start: new Date(NOW + 15 * 60_000) });
-    const at3 = buildEvent({ id: 'at3', start: new Date(NOW + 3 * 60_000) });
-    const at1 = buildEvent({ id: 'at1', start: new Date(NOW + 1 * 60_000) });
-    const at7 = buildEvent({ id: 'at7', start: new Date(NOW + 7 * 60_000) });
-    const result = pickEventsToNotify([at15, at3, at1, at7], NOW, [15, 3, 1]);
-    expect(result.map(e => e.id).sort()).toEqual(['at1', 'at15', 'at3']);
+  it('accepts notifiedKeys as a Set', () => {
+    const start = new Date(NOW + 10 * 60_000);
+    const ev = buildEvent({ id: 't10', start });
+    const notified = new Set([keyOf('t10', start, 10)]);
+    expect(pickEventsToNotify([ev], NOW, [10], notified)).toEqual([]);
   });
 
-  it('does not return the same event twice when offsets contain duplicates', () => {
-    const at10 = buildEvent({ id: 'at10', start: new Date(NOW + 10 * 60_000) });
-    const result = pickEventsToNotify([at10], NOW, [10, 10]);
-    expect(result.map(e => e.id)).toEqual(['at10']);
+  it('returns only the offset whose deadline has been crossed when multiple offsets are registered', () => {
+    // delta = 8min: 10min crossed (8 <= 10), 2min not crossed (8 > 2)
+    const start = new Date(NOW + 8 * 60_000);
+    const ev = buildEvent({ id: 'multi', start });
+    const result = pickEventsToNotify([ev], NOW, [10, 2], []);
+    expect(result.map(p => p.offset)).toEqual([10]);
+  });
+
+  it('coalesces duplicate offsets (e.g. [10, 10] only fires once)', () => {
+    const start = new Date(NOW + 10 * 60_000);
+    const ev = buildEvent({ id: 'dup', start });
+    const result = pickEventsToNotify([ev], NOW, [10, 10], []);
+    expect(result).toHaveLength(1);
+  });
+
+  it('distinguishes occurrences with the same id but different start (recurring events)', () => {
+    // Both occurrences are within the offset=10 window. The first one is
+    // already marked notified, so only the second should fire.
+    const start1 = new Date(NOW + 5 * 60_000);
+    const start2 = new Date(NOW + 8 * 60_000);
+    const occ1 = buildEvent({ id: 'rec', start: start1 });
+    const occ2 = buildEvent({ id: 'rec', start: start2 });
+    const notified = [keyOf('rec', start1, 10)];
+    const result = pickEventsToNotify([occ1, occ2], NOW, [10], notified);
+    expect(result.map(p => p.key)).toEqual([keyOf('rec', start2, 10)]);
+  });
+});
+
+describe('mergeAndPruneNotifiedKeys', () => {
+  const buildPick = (id: string, start: Date, offset: number) => {
+    const ev = buildEvent({ id, start });
+    return { event: ev, offset, key: keyOf(id, start, offset) };
+  };
+
+  it('returns new picks when prevKeys is empty', () => {
+    const start = new Date(NOW + 10 * 60_000);
+    const pick = buildPick('a', start, 10);
+    const result = mergeAndPruneNotifiedKeys([], [pick], [pick.event]);
+    expect(result).toEqual([pick.key]);
+  });
+
+  it('deduplicates a key that appears in both prev and new picks', () => {
+    const start = new Date(NOW + 10 * 60_000);
+    const pick = buildPick('a', start, 10);
+    const prev = [pick.key];
+    const result = mergeAndPruneNotifiedKeys(prev, [pick], [pick.event]);
+    expect(result).toEqual([pick.key]);
+  });
+
+  it('prunes keys whose occurrence is no longer in events', () => {
+    const aStart = new Date(NOW + 10 * 60_000);
+    const bStart = new Date(NOW + 20 * 60_000);
+    const aPick = buildPick('a', aStart, 10);
+    const bPick = buildPick('b', bStart, 10);
+    // events now only contains b — a should be pruned
+    const result = mergeAndPruneNotifiedKeys(
+      [aPick.key, bPick.key],
+      [],
+      [bPick.event],
+    );
+    expect(result).toEqual([bPick.key]);
+  });
+
+  it('prunes every key when events is undefined', () => {
+    const start = new Date(NOW + 10 * 60_000);
+    const pick = buildPick('a', start, 10);
+    const result = mergeAndPruneNotifiedKeys([pick.key], [], undefined);
+    expect(result).toEqual([]);
+  });
+
+  it('keeps both keys when the same id has two occurrences with different starts', () => {
+    const start1 = new Date(NOW + 10 * 60_000);
+    const start2 = new Date(NOW + 10 * 60_000 + DAY_MS);
+    const occ1 = buildPick('rec', start1, 10);
+    const occ2 = buildPick('rec', start2, 10);
+    const result = mergeAndPruneNotifiedKeys(
+      [],
+      [occ1, occ2],
+      [occ1.event, occ2.event],
+    );
+    expect(result.sort()).toEqual([occ1.key, occ2.key].sort());
   });
 });

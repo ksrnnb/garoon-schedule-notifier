@@ -91,5 +91,11 @@
   },
   "err_duplicate_notify_minutes": {
     "message": "Duplicate timing is not allowed"
+  },
+  "notify_title_prefix": {
+    "message": "($MINUTES$ min before) ",
+    "placeholders": {
+      "minutes": { "content": "$1" }
+    }
   }
 }

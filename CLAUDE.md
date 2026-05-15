@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Chrome extension (Manifest V3) that enhances schedule notifications for Garoon (Cybozu groupware). It is a **personal side project, not an official Cybozu product** — keep that framing if you touch user-visible copy. Originally forked from `kamiaka/garoon-chrome-extension` (MIT) and substantially modified.
 
+Targets **cloud Garoon only** (`*.cybozu.com`); on-prem is unsupported. The manifest's `host_permissions` is pinned to `https://*.cybozu.com/*` — don't broaden it without a deliberate reason, and don't accept arbitrary hosts in the `baseURL` option.
+
 ## Commands
 
 Package manager is **pnpm** (`packageManager: pnpm@10.33.0`). Toolchain is webpack + ts-loader + sass-loader; tests run on Vitest + jsdom.
@@ -43,13 +45,17 @@ The webpack entry points in `webpack.config.ts` map directly to MV3 surfaces (ev
 
 ### Single-alarm event loop
 
-`src/background.ts` is the heart of the extension. A single `chrome.alarms` alarm (`watchNotification`, `periodInMinutes: 1`) drives **three responsibilities** on every tick:
+`src/background.ts` is the heart of the extension. A single `chrome.alarms` alarm (`watchNotification`, `periodInMinutes: 1`) plus `chrome.runtime.onStartup` both invoke the same `tick()` function. Each `tick()` runs **three responsibilities in order**:
 
-1. **`notifyEvents()`** — scan stored events, match `start - now == notifyMinutesBefore` minutes, and emit a notification (and chime if enabled). Subjects are filtered against the user's `ignoreEventKeywords` list.
-2. **Stale-store refresh** — if `Date.now() - lastUpdate >= refreshInMinutes`, call the Garoon REST API (`GaroonAPI.getScheduleEvents`) and overwrite `events` in `chrome.storage.local`.
+1. **Conditional `update()`** — if `Date.now() - lastUpdate >= refreshInMinutes`, **or** `detectWake()` (`src/common/util/sleep.ts`) detects that the previous alarm fired more than `WAKE_THRESHOLD_MS` (75s) ago (= we likely slept), call `GaroonAPI.getScheduleEvents` and overwrite `events`. `update()` is wrapped in an inner try/catch so that API failures don't block the rest of the tick — notification judgment continues against the cached `events`.
+2. **`notifyEvents()`** — for each `(event, offset)` pair, fire a notification when the half-open condition `delta = start - now`, `-GRACE_MS <= delta <= offset*60_000` holds *and* the dedup key `${event.id}:${startMs}:${offset}` is not already in `Store.notifiedKeys`. After firing, the returned merged-and-pruned key list is saved back. `GRACE_MS = 10 * 60_000`. Bursts (multiple picks in one tick) play the chime once (first pick only) but emit all notifications.
 3. **`updateBadge()`** — set the action icon (color vs. gray-on-error), badge text (next event's HH:MM, or `!` on auth error), and badge color.
 
-The store keeps events from **today 00:00 through ~30 days ahead** so the popup can render already-finished events from earlier today. Don't tighten that filter without checking `popup.ts setEvents()` and `badge.ts nextEventToday()`.
+Between (1) and (2), the tick saves `lastAlarmPingedAt = now`. Position is deliberate: if the SW is killed mid-`update()`, the ping is **not** recorded, so the next tick sees `detectWake() == true` and force-refreshes events; if a later step throws, the ping **is** recorded, so the next tick proceeds normally rather than wasting an API call per minute.
+
+The store keeps events from **today 00:00 through ~1 day ahead** so the popup can render already-finished events from earlier today. The 1-day upper bound matches what consumers actually need: the popup and `badge.ts nextEventToday()` only look at today, and notifications fire ≤ `MAX_NOTIFY_MINUTES` (60min) before start. Don't tighten the lower bound without checking `popup.ts setEvents()`. `mergeAndPruneNotifiedKeys` relies on this window — keys whose `${id}:${startMs}` prefix is not in `events` get dropped.
+
+Key files for this loop: `src/common/util/eventFilter.ts` (half-open `pickEventsToNotify`, `mergeAndPruneNotifiedKeys`, `GRACE_MS`), `src/common/util/sleep.ts` (`detectWake`, `WAKE_THRESHOLD_MS`), `src/common/store/index.ts` (`notifiedKeys`, `lastAlarmPingedAt`).
 
 ### Auth-error path
 
@@ -76,6 +82,8 @@ background.ts notifyEvent()
 ### Storage shape
 
 A single key `grn.config` in `chrome.storage.local` holds the entire `Store` (see `src/common/store/index.ts`). `load()` always merges over `defaultConfig`, so adding a new field requires (a) adding it to the `Store` interface, (b) giving it a default in `defaultConfig`, and (c) wiring it into `options.ts` (read on init, write on submit).
+
+Field migrations follow the `notifyMinutesBefore` → `notifyMinutesBeforeList` precedent: `migrateNotifyMinutes()` runs on the **raw stored value before merging `defaultConfig`** (so the default doesn't mask the absence of the new field), and `save()` keeps the deprecated scalar field in sync from the new list's head value to stay forward/backward-compatible with rolled-back versions. Mark the old field `@deprecated` in the `Store` interface rather than deleting it.
 
 ### i18n
 
