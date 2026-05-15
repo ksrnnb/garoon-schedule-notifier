@@ -150,6 +150,15 @@ export async function tick() {
   }
 }
 
+// SW は MV3 で頻繁に再起動する。`chrome.alarms.create` を同名で再呼出すると
+// 既存 alarm が破棄されて次回発火時刻がリセットされるため、起動の度に呼ぶと
+// 「いつまでも 1 分待ち」を繰り返しかねない。get で存在確認してから作る。
+async function ensureWatchAlarm() {
+  const existing = await chrome.alarms.get('watchNotification');
+  if (existing) return;
+  await chrome.alarms.create('watchNotification', { periodInMinutes: 1 });
+}
+
 function run() {
   chrome.runtime.onInstalled.addListener(details => {
     console.info(`installed reason: ${details.reason}`);
@@ -160,14 +169,14 @@ function run() {
 
   initNotificationEvent();
 
+  // MV3 SW: イベントリスナーは top-level で同期登録する必要がある。
+  // alarm の存在確認/作成はその後に async で済ませる。
   chrome.alarms.onAlarm.addListener(tick);
   chrome.runtime.onStartup.addListener(tick);
 
   message.listen(message.Type.Update, update);
 
-  chrome.alarms.create('watchNotification', {
-    periodInMinutes: 1,
-  });
+  ensureWatchAlarm().catch(e => console.warn('ensureWatchAlarm failed', e));
 }
 
 run();
