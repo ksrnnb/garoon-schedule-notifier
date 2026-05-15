@@ -14,36 +14,41 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// rangeStart は RANGE_START_PADDING_DAYS = 7 日ぶん遡って返す
+// (API の strict `start > rangeStart` を超えて「7 日前 00:00」以降に
+// 始まった multi-day 予定を含めるため。今日も継続中の出張・研修・
+// 連泊オンコール等の対応)。計算上は today.getDate() - 7 at 00:00:-1 なので
+// 暦上の日付は today - 8 days 23:59:59 になる。
 describe('buildScheduleEventsRangeStart', () => {
-  it('returns yesterday 23:59:59 local-time (JST)', () => {
+  it('returns 8 days ago 23:59:59 local-time (JST)', () => {
     mockTzOffset(-540);
-    const today = new Date(2026, 3, 25, 12, 30, 45); // April 25, 2026 (local)
+    const today = new Date(2026, 3, 25, 12, 30, 45); // April 25 → boundary at April 17 23:59:59
     expect(buildScheduleEventsRangeStart(today)).toBe(
-      '2026-04-24T23:59:59+09:00',
+      '2026-04-17T23:59:59+09:00',
     );
   });
 
-  it('rolls back to previous month on the 1st', () => {
+  it('rolls back across a month boundary', () => {
     mockTzOffset(-540);
-    const today = new Date(2026, 3, 1); // April 1 → March 31
+    const today = new Date(2026, 3, 1); // April 1 → boundary at March 24 23:59:59
     expect(buildScheduleEventsRangeStart(today)).toBe(
-      '2026-03-31T23:59:59+09:00',
+      '2026-03-24T23:59:59+09:00',
     );
   });
 
-  it('rolls back to previous year on January 1st', () => {
+  it('rolls back across a year boundary in early January', () => {
     mockTzOffset(-540);
-    const today = new Date(2026, 0, 1);
+    const today = new Date(2026, 0, 1); // boundary at Dec 24, 2025 23:59:59
     expect(buildScheduleEventsRangeStart(today)).toBe(
-      '2025-12-31T23:59:59+09:00',
+      '2025-12-24T23:59:59+09:00',
     );
   });
 
   it('zero-pads single-digit month and day', () => {
     mockTzOffset(-540);
-    const today = new Date(2026, 2, 9); // March 9 → March 8
+    const today = new Date(2026, 2, 9); // March 9 → boundary at March 1 23:59:59
     expect(buildScheduleEventsRangeStart(today)).toBe(
-      '2026-03-08T23:59:59+09:00',
+      '2026-03-01T23:59:59+09:00',
     );
   });
 
@@ -51,7 +56,7 @@ describe('buildScheduleEventsRangeStart', () => {
     mockTzOffset(480);
     const today = new Date(2026, 3, 25);
     expect(buildScheduleEventsRangeStart(today)).toBe(
-      '2026-04-24T23:59:59-08:00',
+      '2026-04-17T23:59:59-08:00',
     );
   });
 
@@ -59,7 +64,7 @@ describe('buildScheduleEventsRangeStart', () => {
     mockTzOffset(-330);
     const today = new Date(2026, 3, 25);
     expect(buildScheduleEventsRangeStart(today)).toBe(
-      '2026-04-24T23:59:59+05:30',
+      '2026-04-17T23:59:59+05:30',
     );
   });
 
@@ -67,7 +72,7 @@ describe('buildScheduleEventsRangeStart', () => {
     mockTzOffset(0);
     const today = new Date(2026, 3, 25);
     expect(buildScheduleEventsRangeStart(today)).toBe(
-      '2026-04-24T23:59:59+00:00',
+      '2026-04-17T23:59:59+00:00',
     );
   });
 

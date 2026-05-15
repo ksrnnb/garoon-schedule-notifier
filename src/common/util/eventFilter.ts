@@ -13,12 +13,23 @@ export interface NotifyPick {
   key: string;
 }
 
-// Keep events from local "today 00:00" through `daysAhead` days from `now`.
-// Lower bound is local midnight (not `now`) so the popup can render
-// already-finished events from earlier today. Upper bound default is 1 day:
-// the only consumers of stored `events` are the popup (today only), the
-// badge (today only), and notifications (offset capped by MAX_NOTIFY_MINUTES
-// = 60min in options.ts) — anything farther out is dead weight in storage.
+// Keep events that have any portion at or after local "today 00:00", up to
+// "now + daysAhead". The lower bound is `start >= todayStartMs ||
+// end > todayStartMs` — the compound form matches popup.isTodayEvent and
+// captures both:
+//   - today-or-future events  (start >= today 00:00)
+//   - cross-midnight / multi-day events still overlapping today
+//                             (start < today 00:00, end > today 00:00)
+// Events ending exactly at today 00:00 (yesterday's late meeting that just
+// ended) are deliberately dropped: `end > todayStartMs` is strict on the
+// past side, while `start >= todayStartMs` is inclusive on the future side
+// (so instant events at today 00:00 are kept). This matches the API's
+// rangeStart padding (RANGE_START_PADDING_DAYS in API.ts).
+//
+// Upper bound default is 1 day: consumers of stored `events` are the popup
+// (today only), the badge (today only), and notifications (offset capped by
+// MAX_NOTIFY_MINUTES = 60min) — anything farther out is dead weight in
+// storage.
 export function filterUpcomingEvents(
   events: ScheduleEvent[],
   now: number,
@@ -30,7 +41,9 @@ export function filterUpcomingEvents(
   const horizon = daysAhead * DAY_MS;
   return events.filter(ev => {
     const start = new Date(ev.start.dateTime).getTime();
-    return start >= todayStartMs && start - now < horizon;
+    const end = ev.end?.dateTime ? new Date(ev.end.dateTime).getTime() : start;
+    const overlapsToday = start >= todayStartMs || end > todayStartMs;
+    return overlapsToday && start - now < horizon;
   });
 }
 

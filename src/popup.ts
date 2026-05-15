@@ -9,12 +9,6 @@ import { ScheduleEvent } from './common/api';
 import * as store from './common/store';
 import * as bg from './common/background';
 
-declare global {
-  interface Window {
-    update: () => Promise<void>;
-  }
-}
-
 function init() {
   initDOM();
   render();
@@ -92,7 +86,13 @@ export function isTodayEvent(
 ): boolean {
   const start = new Date(ev.start.dateTime).getTime();
   const end = ev.end?.dateTime ? new Date(ev.end.dateTime).getTime() : start;
-  return start < tomorrowStart.getTime() && end > todayStart.getTime();
+  const todayStartMs = todayStart.getTime();
+  // Same compound boundary as filterUpcomingEvents (see comment there): an
+  // event is "today" if it starts today (inclusive of 00:00) or if it
+  // started earlier but still ends after today began. Strict `>` on the
+  // past side drops yesterday-ending-exactly-at-midnight events.
+  const overlapsToday = start >= todayStartMs || end > todayStartMs;
+  return start < tomorrowStart.getTime() && overlapsToday;
 }
 
 export function getEventState(

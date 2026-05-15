@@ -8,7 +8,9 @@
 
 import * as message from './common/background';
 
-interface Partial {
+// "Partial" は TS 組み込み Partial<T> と衝突する名前なのでファイル内に
+// 限定して BellPartial に改名している (倍音 = harmonic partial の意)。
+interface BellPartial {
   carrierRatio: number; // carrier freq = FUNDAMENTAL_HZ * carrierRatio
   modRatio: number; // modulator freq = carrier * modRatio (non-integer = metallic)
   modIndex: number; // peak FM depth in Hz; decays with the partial envelope
@@ -18,7 +20,7 @@ interface Partial {
 
 const FUNDAMENTAL_HZ = 3800;
 
-const PARTIALS: ReadonlyArray<Partial> = [
+const PARTIALS: ReadonlyArray<BellPartial> = [
   // 芯（長く、軽く残る）
   { carrierRatio: 1.0, modRatio: 1.0, modIndex: 0.01, gain: 1.0, decay: 2.2 },
 

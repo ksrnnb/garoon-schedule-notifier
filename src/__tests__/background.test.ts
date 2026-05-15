@@ -98,6 +98,9 @@ function installChrome(initial: Record<string, unknown> = {}) {
           alarmSlot.fn = fn;
         },
       },
+      // ensureWatchAlarm が get → 不在なら create を呼ぶ流れに変わったため、
+      // 既存 alarm 無し相当の undefined を返す。
+      get: vi.fn().mockResolvedValue(undefined),
       create: vi.fn(),
     },
     runtime: {
