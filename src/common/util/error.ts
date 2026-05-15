@@ -20,17 +20,7 @@ export async function requireAuth(inAction?: boolean) {
   await setError(msg);
 
   if (!inAction && error !== msg) {
-    notify(
-      {
-        title: msg,
-      },
-      {
-        onClicked: () =>
-          chrome.tabs.create({
-            url: baseURL,
-          }),
-      },
-    );
+    await notify({ title: msg }, baseURL);
   }
 }
 
@@ -61,5 +51,9 @@ export async function handleError(err: any, inAction?: boolean) {
     console.warn(`API Error status ${err.status()}`, msg ?? '');
     return;
   }
-  Promise.reject(err);
+  // 既知の error type 以外は contract 上「best-effort で握る」設計
+  // (caller の bus は sendResponse({ error }) で別途伝搬する)。
+  // 過去版で書かれていた `Promise.reject(err)` は浮いた rejection を
+  // 作るだけで何の効果も無かったため、診断ログに置換した。
+  console.warn('unhandled error in handleError', err);
 }

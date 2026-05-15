@@ -12,6 +12,7 @@ import {
   pickEventsToNotify,
   playChime,
   requireAuth,
+  scheduleURL,
   setError,
   t,
   timeString,
@@ -35,7 +36,7 @@ async function update() {
     await clearError();
   } catch (e) {
     if (e instanceof ErrorResponse && e.status() === 401) {
-      requireAuth();
+      await requireAuth();
       return;
     }
     throw e;
@@ -71,15 +72,22 @@ async function notifyEvents(): Promise<string[] | undefined> {
 
   // バースト時 (同 tick で複数件まとめて通知) はチャイム連打を避けるため
   // 先頭 1 件だけ playChime に volume を渡す。通知本体は全件出す。
+  //
+  // notifyEvent は await する。fire-and-forget だと chrome.notifications.create
+  // の callback 完了前に SW が落ちて通知が出ない (or 後段の notifiedKeys 保存
+  // との順序が壊れて取りこぼし) リスクがあるため。1 件の失敗で他を巻き込まない
+  // よう Promise.all の各要素を .catch でガードする。
   const playVolume = playsSound ? soundVolume : undefined;
-  picks.forEach(({ event: ev, offset }, i) => {
-    notifyEvent(
-      ev,
-      offset,
-      baseURL && `${baseURL.replace(/\/+$/, '')}/schedule/view?event=${ev.id}`,
-      i === 0 ? playVolume : undefined,
-    );
-  });
+  await Promise.all(
+    picks.map(({ event: ev, offset }, i) =>
+      notifyEvent(
+        ev,
+        offset,
+        baseURL ? scheduleURL(baseURL, ev.id) : undefined,
+        i === 0 ? playVolume : undefined,
+      ).catch(e => console.warn('notifyEvent failed', e)),
+    ),
+  );
 
   // picks=0 でも events が入れ替わって stale なキーが残っていれば剪定したい。
   // 常に merge+prune を走らせ、結果が prev と要素数一致なら変更なしとみなす。
@@ -98,23 +106,9 @@ async function notifyEvent(
     ? t('all_day')
     : `${timeString(new Date(ev.start.dateTime))} - ${timeString(new Date(ev.end.dateTime))}`;
   const title = t('notify_title_prefix', String(offsetMinutes)) + ev.subject;
-  notify(
-    {
-      title,
-      message: timeLabel,
-    },
-    {
-      onClicked: () => {
-        if (url) {
-          chrome.tabs.create({
-            url,
-          });
-        }
-      },
-    },
-  );
+  await notify({ title, message: timeLabel }, url);
   if (volume !== undefined) {
-    playChime(volume).catch(e => console.warn('playChime failed', e));
+    await playChime(volume).catch(e => console.warn('playChime failed', e));
   }
 }
 
