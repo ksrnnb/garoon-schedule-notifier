@@ -2,20 +2,11 @@ import { zeroPad } from '../util';
 import { ErrorResponse } from './ErrorResponse';
 import { Method, ScheduleEvent } from './type';
 
-// Build the rangeStart query parameter for /schedule/events: midnight local-time
-// of the same date one month before `today`, formatted as ISO-8601 with the
-// local UTC offset. JS Date normalises a negative month, so January rolls back
-// to the previous December automatically.
-export function buildScheduleEventsRangeStart(
-  today: Date = new Date(),
-): string {
-  const d = new Date(
-    today.getFullYear(),
-    today.getMonth() - 1,
-    today.getDate(),
-  );
+// Format a local Date as ISO-8601 with the local UTC offset, e.g.
+// "2026-04-24T23:59:59+09:00". The Garoon API requires a TZ-qualified
+// timestamp.
+function formatLocalISOWithOffset(d: Date): string {
   const offset = -d.getTimezoneOffset();
-
   return (
     d.getFullYear() +
     '-' +
@@ -33,6 +24,44 @@ export function buildScheduleEventsRangeStart(
     ':' +
     zeroPad(Math.abs(offset) % 60)
   );
+}
+
+// rangeEnd を「翌日 23:59:59」ではなく 7 日先まで広げているのは、API が
+// `event.end < rangeEnd` で弾くため、出張・研修のような今日始まって数日後に
+// 終わる予定を取りこぼさないため。7 日を超える予定は実運用上稀。
+const RANGE_END_PADDING_DAYS = 7;
+
+// Build the rangeStart query parameter for /schedule/events. Garoon's API
+// filters "events whose start is *strictly after* rangeStart" (per docs), so
+// to keep events starting exactly at today 00:00 inclusive we send
+// "yesterday 23:59:59" local-time. JS Date normalises an underflowed seconds
+// component, so month/year rollover (Jan 1 → Dec 31) is handled automatically.
+export function buildScheduleEventsRangeStart(
+  today: Date = new Date(),
+): string {
+  const d = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+    0,
+    0,
+    -1,
+  );
+  return formatLocalISOWithOffset(d);
+}
+
+// Build the rangeEnd query parameter for /schedule/events: today + 7 days at
+// 23:59:59 local-time. See RANGE_END_PADDING_DAYS for the rationale.
+export function buildScheduleEventsRangeEnd(today: Date = new Date()): string {
+  const d = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate() + RANGE_END_PADDING_DAYS,
+    23,
+    59,
+    59,
+  );
+  return formatLocalISOWithOffset(d);
 }
 
 /**
@@ -66,12 +95,15 @@ export class GaroonAPI {
   // see, https://developer.cybozu.io/hc/ja/articles/360000440583
   async getScheduleEvents() {
     const start = buildScheduleEventsRangeStart();
+    const end = buildScheduleEventsRangeEnd();
     return this.get<{
       hasNext: boolean;
       events: ScheduleEvent[];
     }>(
       'schedule/events?limit=1000&orderBy=start%20asc&rangeStart=' +
-        encodeURIComponent(start),
+        encodeURIComponent(start) +
+        '&rangeEnd=' +
+        encodeURIComponent(end),
     );
   }
 }

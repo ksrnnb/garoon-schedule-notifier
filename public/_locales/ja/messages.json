@@ -91,5 +91,11 @@
   },
   "err_duplicate_notify_minutes": {
     "message": "同じタイミングは登録できません"
+  },
+  "notify_title_prefix": {
+    "message": "（$MINUTES$分前）",
+    "placeholders": {
+      "minutes": { "content": "$1" }
+    }
   }
 }
