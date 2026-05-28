@@ -470,6 +470,102 @@ describe('schedulePreciseAlarm', () => {
   });
 });
 
+describe('updateScheduleEvents retry', () => {
+  // 401 / fetch error は cookie 未ロード等の一時障害が多いため、
+  // 確定で requireAuth に進む前に短い backoff で再試行する。
+  // ここのテストは fake timer で backoff を即時消化する。
+  async function fastForwardRetries(promise: Promise<unknown>) {
+    // 各 retry の setTimeout 直後に await チェーンが進むよう、
+    // タイマー進行と microtask drain を交互に回す。
+    for (let i = 0; i < 5; i++) {
+      await vi.runAllTimersAsync();
+    }
+    return promise;
+  }
+
+  it('retries a 401 response and clears the error when a later attempt succeeds', async () => {
+    vi.useFakeTimers();
+    try {
+      const ctx = installChrome();
+      seedStore(ctx.state, { lastUpdate: 0 }); // gate 通過 → update が走る
+      const { ErrorResponse } = await import('../common/api');
+      // ErrorResponse はテスト側で `class ErrorResponse extends Error {
+      // constructor(status: number) }` として mock しているため、本物の型
+      // (Response を取る) とは食い違う。as unknown as Response で握り潰す。
+      getScheduleEventsMock
+        .mockRejectedValueOnce(new ErrorResponse(401 as unknown as Response))
+        .mockResolvedValueOnce({ events: [] });
+
+      const bg = await loadBackground();
+      const p = bg.tick();
+      await fastForwardRetries(p);
+
+      expect(getScheduleEventsMock).toHaveBeenCalledTimes(2);
+      expect(requireAuthMock).not.toHaveBeenCalled();
+      expect(clearErrorMock).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries a TypeError("Failed to fetch") and recovers on a later attempt', async () => {
+    vi.useFakeTimers();
+    try {
+      const ctx = installChrome();
+      seedStore(ctx.state, { lastUpdate: 0 });
+      getScheduleEventsMock
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockResolvedValueOnce({ events: [] });
+
+      const bg = await loadBackground();
+      const p = bg.tick();
+      await fastForwardRetries(p);
+
+      expect(getScheduleEventsMock).toHaveBeenCalledTimes(2);
+      expect(clearErrorMock).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('calls requireAuth only after exhausting retries on persistent 401', async () => {
+    vi.useFakeTimers();
+    try {
+      const ctx = installChrome();
+      seedStore(ctx.state, { lastUpdate: 0 });
+      const { ErrorResponse } = await import('../common/api');
+      getScheduleEventsMock.mockRejectedValue(
+        new ErrorResponse(401 as unknown as Response),
+      );
+
+      const bg = await loadBackground();
+      const p = bg.tick();
+      await fastForwardRetries(p);
+
+      // RETRY_DELAYS_MS.length + 1 = 3 attempts
+      expect(getScheduleEventsMock).toHaveBeenCalledTimes(3);
+      expect(requireAuthMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not retry non-transient errors (e.g. 500)', async () => {
+    const ctx = installChrome();
+    seedStore(ctx.state, { lastUpdate: 0 });
+    const { ErrorResponse } = await import('../common/api');
+    getScheduleEventsMock.mockRejectedValue(
+      new ErrorResponse(500 as unknown as Response),
+    );
+
+    const bg = await loadBackground();
+    await bg.tick();
+
+    expect(getScheduleEventsMock).toHaveBeenCalledTimes(1);
+    expect(requireAuthMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('tick() concurrency', () => {
   it('coalesces overlapping calls into a single in-flight Promise (notifyEvents runs once)', async () => {
     const ctx = installChrome();

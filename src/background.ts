@@ -8,6 +8,7 @@ import {
   filterUpcomingEvents,
   findNextPreciseDeadline,
   initNotificationEvent,
+  isFetchError,
   mergeAndPruneNotifiedKeys,
   notify,
   pickEventsToNotify,
@@ -22,6 +23,12 @@ import {
 import { GaroonAPI, ScheduleEvent, ErrorResponse } from './common/api';
 import * as store from './common/store';
 import * as message from './common/background';
+
+// 401 / fetch error (cookie 未ロードや一時的なネットワーク断) は MV3 SW が
+// onStartup で起き上がった直後に頻発する。確定で「未認証」とみなす前に
+// 短い backoff で再試行し、本当に通らないときだけ requireAuth に進む。
+// 配列の長さ + 1 が試行回数 (= 3 attempts, total ~45s)。
+export const RETRY_DELAYS_MS = [15_000, 30_000];
 
 // alarm 名は 2 種類。periodic は 1 分周期のフェイルセーフ、precise は
 // 「次の通知 deadline」に合わせて入れる one-shot。両方とも tick() を呼ぶ。
@@ -50,9 +57,21 @@ async function update() {
 }
 
 async function updateScheduleEvents(baseURL: string) {
-  const data = await new GaroonAPI(baseURL).getScheduleEvents();
-  const events = filterUpcomingEvents(data.events, Date.now());
-  await store.save({ events });
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      const data = await new GaroonAPI(baseURL).getScheduleEvents();
+      const events = filterUpcomingEvents(data.events, Date.now());
+      await store.save({ events });
+      return;
+    } catch (e) {
+      const transient =
+        (e instanceof ErrorResponse && e.status() === 401) || isFetchError(e);
+      if (!transient || attempt === RETRY_DELAYS_MS.length) throw e;
+      await new Promise(resolve =>
+        setTimeout(resolve, RETRY_DELAYS_MS[attempt]),
+      );
+    }
+  }
 }
 
 // 通知を発火し、次に保存すべき notifiedKeys を返す。保存は呼び出し側 (tick)
