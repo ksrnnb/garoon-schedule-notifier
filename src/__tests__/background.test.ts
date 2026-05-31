@@ -471,8 +471,6 @@ describe('schedulePreciseAlarm', () => {
 });
 
 describe('updateScheduleEvents retry', () => {
-  // 401 / fetch error は cookie 未ロード等の一時障害が多いため、
-  // 確定で requireAuth に進む前に短い backoff で再試行する。
   // ここのテストは fake timer で backoff を即時消化する。
   async function fastForwardRetries(promise: Promise<unknown>) {
     // 各 retry の setTimeout 直後に await チェーンが進むよう、
@@ -543,6 +541,30 @@ describe('updateScheduleEvents retry', () => {
       await fastForwardRetries(p);
 
       // RETRY_DELAYS_MS.length + 1 = 3 attempts
+      expect(getScheduleEventsMock).toHaveBeenCalledTimes(3);
+      expect(requireAuthMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // cloud Garoon の実環境ではセッション期限切れで 403 が返るのが主。
+  // 401 と同じく retry → requireAuth に進む経路に乗っていることを確認する
+  // (e3bf124 + 後続修正以前は 403 が完全に握り潰されていた)。
+  it('calls requireAuth only after exhausting retries on persistent 403', async () => {
+    vi.useFakeTimers();
+    try {
+      const ctx = installChrome();
+      seedStore(ctx.state, { lastUpdate: 0 });
+      const { ErrorResponse } = await import('../common/api');
+      getScheduleEventsMock.mockRejectedValue(
+        new ErrorResponse(403 as unknown as Response),
+      );
+
+      const bg = await loadBackground();
+      const p = bg.tick();
+      await fastForwardRetries(p);
+
       expect(getScheduleEventsMock).toHaveBeenCalledTimes(3);
       expect(requireAuthMock).toHaveBeenCalledTimes(1);
     } finally {

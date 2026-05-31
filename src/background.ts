@@ -27,13 +27,20 @@ import * as message from './common/background';
 // 401 / fetch error (cookie 未ロードや一時的なネットワーク断) は MV3 SW が
 // onStartup で起き上がった直後に頻発する。確定で「未認証」とみなす前に
 // 短い backoff で再試行し、本当に通らないときだけ requireAuth に進む。
-// 配列の長さ + 1 が試行回数 (= 3 attempts, total ~45s)。
-export const RETRY_DELAYS_MS = [15_000, 30_000];
+// 配列の長さ + 1 が試行回数 (= 3 attempts, total ~20s)。
+// 個々の backoff は MV3 SW の idle timeout (30s) より十分短く保つ。設定値が
+// 30s に近づくと setTimeout 中に SW が kill されて update() の catch に届かず、
+// 結果として requireAuth が呼ばれない (= バッジ/通知が出ない) ケースが出る。
+export const RETRY_DELAYS_MS = [5_000, 15_000];
 
 // alarm 名は 2 種類。periodic は 1 分周期のフェイルセーフ、precise は
 // 「次の通知 deadline」に合わせて入れる one-shot。両方とも tick() を呼ぶ。
 const WATCH_ALARM_NAME = 'watchNotification';
 const PRECISE_ALARM_NAME = 'preciseNotify';
+
+function isAuthError(e: unknown): boolean {
+  return e instanceof ErrorResponse && e.status() >= 400 && e.status() < 500;
+}
 
 async function update() {
   try {
@@ -48,7 +55,7 @@ async function update() {
 
     await clearError();
   } catch (e) {
-    if (e instanceof ErrorResponse && e.status() === 401) {
+    if (isAuthError(e)) {
       await requireAuth();
       return;
     }
@@ -64,8 +71,7 @@ async function updateScheduleEvents(baseURL: string) {
       await store.save({ events });
       return;
     } catch (e) {
-      const transient =
-        (e instanceof ErrorResponse && e.status() === 401) || isFetchError(e);
+      const transient = isAuthError(e) || isFetchError(e);
       if (!transient || attempt === RETRY_DELAYS_MS.length) throw e;
       await new Promise(resolve =>
         setTimeout(resolve, RETRY_DELAYS_MS[attempt]),
