@@ -17,7 +17,7 @@ const getScheduleEventsMock = vi.fn();
 // 踏ませるために実物相当の最小実装を提供する。
 vi.mock('../common/api', () => {
   class GaroonAPI {
-    constructor(public _baseURL: string) { }
+    constructor(public _baseURL: string) {}
     getScheduleEvents = getScheduleEventsMock;
   }
   class ErrorResponse extends Error {
