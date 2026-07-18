@@ -14,12 +14,12 @@ import { t } from './message';
 import { notify } from './notification';
 
 export async function requireAuth(inAction?: boolean) {
-  const { error, baseURL } = await store.load();
+  const { error, baseURL, notifiesRequireAuth } = await store.load();
   const msg = t('err_unauthenticated');
 
   await setError(msg);
 
-  if (!inAction && error !== msg) {
+  if (notifiesRequireAuth !== false && !inAction && error !== msg) {
     // auth エラー通知は同一 ID 固定。状態が一度 clear されてから再び auth-error に
     // 戻った場合 (= ログイン → 期限切れ) の連続通知でも、chrome.notifications が
     // 既存を上書きして toast が積み上がらない。

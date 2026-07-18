@@ -20,6 +20,9 @@ export interface Store {
   playsSound?: boolean;
   soundVolume?: number;
 
+  /** 認証エラー (401) 発生時にトースト通知を出すか。false でも バッジ/アイコンには反映される。 */
+  notifiesRequireAuth?: boolean;
+
   /** 通知済みキー (`${event.id}:${startMs}:${offset}`)。1 予定 × 1 オフセットにつき 1 度だけ通知するための dedup 用。 */
   notifiedKeys?: string[];
   /** 直近の watchNotification alarm 発火時刻 (ms)。スリープ復帰検知用 (detectWake)。未発火 = undefined。 */
@@ -33,6 +36,7 @@ export const defaultConfig: Store = {
   baseURL: '',
   playsSound: true,
   soundVolume: 0.6,
+  notifiesRequireAuth: true,
   notifiedKeys: [],
 };
 

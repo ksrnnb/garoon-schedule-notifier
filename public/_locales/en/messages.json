@@ -65,6 +65,12 @@
   "all_day": {
     "message": "All day"
   },
+  "opt_notifies_require_auth_label": {
+    "message": "Notify on authentication errors"
+  },
+  "opt_notifies_require_auth_note": {
+    "message": "When off, suppresses the toast notification on authentication errors. The icon and badge still reflect the error."
+  },
   "opt_plays_sound_label": {
     "message": "Play a chime when notifying events"
   },

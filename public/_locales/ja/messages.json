@@ -65,6 +65,12 @@
   "all_day": {
     "message": "終日"
   },
+  "opt_notifies_require_auth_label": {
+    "message": "認証エラーを通知する"
+  },
+  "opt_notifies_require_auth_note": {
+    "message": "オフにすると認証エラー時の通知を抑制します"
+  },
   "opt_plays_sound_label": {
     "message": "予定通知時に音を鳴らす"
   },
@@ -95,7 +101,9 @@
   "notify_title_prefix": {
     "message": "（$MINUTES$分前）",
     "placeholders": {
-      "minutes": { "content": "$1" }
+      "minutes": {
+        "content": "$1"
+      }
     }
   }
 }

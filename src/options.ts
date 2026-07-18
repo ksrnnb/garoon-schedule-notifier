@@ -16,6 +16,7 @@ const MAX_NOTIFY_TIMINGS = 10;
 interface FormSnapshot {
   baseURL: string;
   notifyMinutesBeforeList: number[];
+  notifiesRequireAuth: boolean;
   playsSound: boolean;
   soundVolumePercent: number;
 }
@@ -157,6 +158,11 @@ async function init() {
   updateAddButtonEnabled(notifyMinutesList, addNotifyMinutesButton);
   validateNotifyMinutesList(notifyMinutesList);
 
+  const notifiesRequireAuth = input(
+    'notifies-require-auth',
+    v.notifiesRequireAuth ?? defaultConfig.notifiesRequireAuth,
+  );
+
   const playsSound = input('plays-sound', v.playsSound);
   const soundVolume = input(
     'sound-volume',
@@ -184,6 +190,7 @@ async function init() {
   let savedSnapshot: FormSnapshot = {
     baseURL: baseURL.value,
     notifyMinutesBeforeList: [...initialList],
+    notifiesRequireAuth: notifiesRequireAuth.checked,
     playsSound: playsSound.checked,
     soundVolumePercent: parseInt(soundVolume.value, 10),
   };
@@ -197,6 +204,7 @@ async function init() {
     return JSON.stringify({
       baseURL: baseURL.value,
       notifyMinutes: rows,
+      notifiesRequireAuth: notifiesRequireAuth.checked,
       playsSound: playsSound.checked,
       soundVolume: soundVolume.value,
     });
@@ -220,6 +228,7 @@ async function init() {
     updateAddButtonEnabled(notifyMinutesList, addNotifyMinutesButton);
     validateNotifyMinutesList(notifyMinutesList);
 
+    notifiesRequireAuth.checked = s.notifiesRequireAuth;
     playsSound.checked = s.playsSound;
     soundVolume.value = `${s.soundVolumePercent}`;
     updateVolumeLabel();
@@ -269,6 +278,8 @@ async function init() {
     }
   });
 
+  notifiesRequireAuth.addEventListener('change', updateCancelButtonEnabled);
+
   soundVolume.addEventListener('input', updateVolumeLabel);
   soundVolume.addEventListener('input', updateCancelButtonEnabled);
   playsSound.addEventListener('change', updateSoundControlsEnabled);
@@ -309,6 +320,7 @@ async function init() {
       await store.save({
         baseURL: baseURL.value,
         notifyMinutesBeforeList,
+        notifiesRequireAuth: notifiesRequireAuth.checked,
         playsSound: playsSound.checked,
         soundVolume: clamp01(soundVolumePercent / 100),
       });
@@ -316,6 +328,7 @@ async function init() {
       savedSnapshot = {
         baseURL: baseURL.value,
         notifyMinutesBeforeList: [...notifyMinutesBeforeList],
+        notifiesRequireAuth: notifiesRequireAuth.checked,
         playsSound: playsSound.checked,
         soundVolumePercent,
       };
